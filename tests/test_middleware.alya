@@ -1,0 +1,66 @@
+## Test suite for web middleware settings and server wiring
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
+import "std/test"
+import "../src/lib.alya" as web
+
+function main()
+    test_suite("web Middleware Tests")
+    let r = runner_new()
+
+    # 1. Chainable settings store into options
+    let app = web::app()
+    app.use_logger().use_request_id().use_compression(128).use_keep_alive(10).use_timeout(2500).use_limits(2048, 4096).use_forwarded()
+    runner_assert_eq(r, app.options["logger_enabled"], 1, "logger stored")
+    runner_assert_eq(r, app.options["request_id_enabled"], 1, "request id stored")
+    runner_assert_eq(r, app.options["compression_min"], 128, "compression min stored")
+    runner_assert_eq(r, app.options["keep_alive_max"], 10, "keep alive max stored")
+    runner_assert_eq(r, app.options["timeout_ms"], 2500, "timeout stored")
+    runner_assert_eq(r, app.options["max_body_size"], 4096, "body cap stored")
+    runner_assert_eq(r, app.options["forwarded_enabled"], 1, "forwarded stored")
+
+    app.use_cors("https://x.test", "GET, POST", "Content-Type")
+    runner_assert_str_eq(r, app.options["cors_origin"], "https://x.test", "cors origin stored")
+    app.use_static("/s", "./pub")
+    runner_assert_str_eq(r, app.options["static_dir"], "./pub", "static dir stored")
+    app.use_rate_limit(5, 1000)
+    runner_assert_eq(r, app.options["rate_limit"], 5, "rate limit stored")
+    app.use_basic_auth("u", "p")
+    runner_assert_str_eq(r, app.options["auth_kind"], "basic", "basic kind stored")
+    app.use_bearer_auth("tok")
+    runner_assert_str_eq(r, app.options["auth_token"], "tok", "bearer token stored")
+    app.use_jwt_auth("s3c")
+    runner_assert_str_eq(r, app.options["auth_kind"], "jwt", "jwt kind stored")
+    app.set_log_format("M")
+    runner_assert_str_eq(r, app.options["log_format"], "M", "log format stored")
+
+    # 2. Free-function forms store identically
+    let app2 = web::app()
+    web::use_logger(app2)
+    web::use_rate_limit(app2, 7, 2000)
+    runner_assert_eq(r, app2.options["logger_enabled"], 1, "free logger stored")
+    runner_assert_eq(r, app2.options["rate_limit"], 7, "free rate stored")
+
+    # 3. Settings materialize on the built server
+    let srv = web::app_build_server(app, 19990, "127.0.0.1")
+    let sopt = srv.options
+    runner_assert_eq(r, sopt["logger_enabled"], 1, "server logger wired")
+    runner_assert_eq(r, sopt["request_id_enabled"], 1, "server request id wired")
+    runner_assert_eq(r, sopt["keep_alive_enabled"], 1, "server keep alive wired")
+    runner_assert_eq(r, sopt["forwarded_enabled"], 1, "server forwarded wired")
+    runner_assert_eq(r, sopt["rate_limit_enabled"], 1, "server rate wired")
+    runner_assert_eq(r, sopt["auth_enabled"], 1, "server auth wired")
+
+    # 4. Defaults stay off on a bare app server
+    let bare = web::app_build_server(web::app(), 19991, "127.0.0.1")
+    let bopt = bare.options
+    runner_assert_eq(r, bopt["logger_enabled"], 0, "bare logger off")
+    runner_assert_eq(r, bopt["auth_enabled"], 0, "bare auth off")
+    runner_assert_eq(r, bopt["keep_alive_enabled"], 0, "bare keep alive off")
+
+    let failed = runner_summary(r)
+    if failed > 0
+        exit(1)
+    end
+end
+
+main()

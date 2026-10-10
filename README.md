@@ -11,15 +11,12 @@ High-level web framework for Alya: routing, middleware, JSON APIs, and views
 
 ## 🌟 Features
 
-- ⚡ **Lightweight & High Performance**: Minimal memory overhead, zero runtime bloat, and fast native execution
-- 🧩 **Modular Architecture**: Layered multi-module design featuring a clean public facade (`src/lib.alya`), rich data models (`src/types.alya`), and encapsulated core formatters (`src/core/formatter.alya`)
-- 🔒 **Public/Private Visibility (`pub`)**: Fine-grained export control with `pub` for public functions, structs, and enums, keeping internal helper functions private and encapsulated
-- 🎭 **Structural Duck Typing & Interfaces**: Dynamic interface dispatch (`Summarizable`, `Describable`) without brittle inheritance hierarchies
-- 📦 **Rich Domain Models & Enums**: Idiomatic `enum` types (`WebStatus`, `WebPriority`, `WebStyle`) and typed data containers (`WebConfig`, `WebResult`, `WebStats`)
-- 🎯 **Advanced Pattern Matching**: Clean branching with `when` expressions, range matching, and condition guards
-- 🛡️ **Defensive Result Pattern**: Structured error handling and outcome encapsulation with `ok_result` and `error_result`
-- 🧪 **Enterprise Test & Benchmark Suite**: 100% test coverage with standard assertions (`std/test`) and micro-benchmarking (`std/test` bench runner)
-- 🚩 **Feature-Gated API Slices**: Optional capability slices via `[features]` in `alya.toml` (`default = ["extras"]`) and `@cfg(feature = "extras")` gating with a `@cfg(not(feature = "extras"))` fallback stub (see `src/core/extras.alya`)
+- 🧭 **App & Routing**: `app()` with `get/post/put/delete/patch/any` routes, path params (`:id`), wildcards (`*path`), groups, and UFCS method forms (`app.get(...)`)
+- 🛡️ **Error Boundary**: throwing handlers become 500 responses; custom `not_found` and `on_error` hooks instead of dead connections
+- 🧩 **Middleware Suite**: CORS, compression, static files, logging (+templates), Basic/Bearer/JWT auth, rate limiting, request IDs, timeouts, size limits, keep-alive, trusted proxies, TLS — all `use_*` one-liners
+- 📦 **JSON APIs**: `ctx_json`, `ctx_json_value`, `ctx_json_map`, `ctx_body_json` for request/response cycles
+- 🖥️ **Views**: Mustache rendering (`ctx_render`) for HTML responses
+- 🔁 **Serve Loop**: one-call `listen` with keep-alive connection reuse over `alya-lang/http` (v0.4.0)
 
 ---
 
@@ -27,29 +24,27 @@ High-level web framework for Alya: routing, middleware, JSON APIs, and views
 
 ```
 web/
-├── .alyalint               # Linter configuration (rules, exclusions, severity overrides)
-├── .editorconfig           # Uniform formatting rules across IDEs and editors
-├── .gitignore              # Ecosystem standard ignore filters
-├── .vscode/                # VS Code workspace settings, DAP launch configurations & tasks
-├── alya.toml               # Package manifest with dependencies, [features] and optional [build]
-├── c/                      # (Optional) Native C sources for zero-dependency FFI packages
+├── alya.toml               # Package manifest (depends on alya-lang/http)
 ├── src/
-│   ├── lib.alya            # Public API facade (pub exports, re-exports & pipeline runners)
-│   ├── types.alya          # Data models, pub enums, pub structs, and struct methods
-│   ├── ffi.alya            # (Optional) Native extern "C" declarations
-│   └── core/               # Subdirectory module hierarchy
-│       ├── formatter.alya  # Domain formatting routines, salutation builders & pattern matchers
-│       └── extras.alya     # Feature-gated (`extras`) optional API slice with `@cfg` gating
+│   ├── lib.alya            # Public API facade & `app()` constructor
+│   ├── types.alya          # `App` and `WebGroup` models
+│   ├── app.alya            # Routes, groups, error hooks, serve loop
+│   ├── middleware.alya     # `use_*` settings (all chainable)
+│   └── context.alya        # `ctx_*` handler conveniences
 ├── examples/
-│   └── demo.alya           # Comprehensive runnable walkthrough of all package capabilities
-├── tests/
-│   └── test_basic.alya     # Automated test suite with 100% feature coverage
+│   └── demo.alya           # Runnable tour of routes, middleware, and serving
+├── tests/                  # 5 suites: app, context, middleware, serve, errors
+│   ├── test_app.alya
+│   ├── test_context.alya
+│   ├── test_middleware.alya
+│   ├── test_serve.alya
+│   └── test_errors.alya
 └── benches/
-    └── bench_basic.alya    # Micro-benchmarks measuring performance and throughput
+    └── bench_basic.alya    # Route dispatch micro-benchmarks
 ```
 
 > [!NOTE]
-> **Visibility & Modularity:** Symbols annotated with `pub` (`pub function`, `pub struct`, `pub enum`, `pub interface`) are exported to external consumers and re-exporting modules. Symbols without `pub` remain strictly internal to their declaring module, preventing symbol collisions and implementation leakage.
+> **Visibility & Modularity:** Symbols annotated with `pub` are exported to external consumers. Route handlers registered with `app.get/post/...` are first-class function values invoked with the request context.
 
 ---
 
@@ -71,18 +66,11 @@ alya install
 
 ### Package Features
 
-| Feature | Default | Description |
-|:---|:---:|:---|
-| `extras` | ✅ | Optional capability slice (`extra_greeting` in `src/core/extras.alya`, with a fallback stub when disabled). |
+This package ships a single, dependency-light build with no optional features.
 
 ```bash
-# Full build (default)
 alya install
 alya test
-
-# Slim build (core only)
-alya install --no-default-features
-alya test --no-default-features
 ```
 
 ---
@@ -90,21 +78,37 @@ alya test --no-default-features
 ## 🚀 Quick Start
 
 ```alya
-import "web" as pkg
+import "web" as web
+
+function hello(ctx)
+    return web::ctx_json_map(ctx, {"message": "Hello"})
+end
+
+function user(ctx)
+    let uid = web::ctx_param(ctx, "id")
+    return web::ctx_text(ctx, "user:" + uid, 200)
+end
 
 function main()
-    # 1. Basic facade call with default parameter
-    let greeting = pkg::hello()
-    say f"Greeting:  {greeting}"
+    let app = web::app()
+    app.get("/hello", hello)
+    app.get("/users/:id", user)
+    app.use_request_id()
+    app.listen(8080)
+end
 
-    # 2. Struct configuration with priority, style, and methods
-    let cfg = pkg::new_config("Community", 5, pkg::WebPriority.High, pkg::WebStyle.Formal)
-    say f"Summary:   {cfg.summary()}"
-    say f"Formatted: {pkg::core_format_custom(cfg)}"
+main()
+```
 
-    # 3. Processing pipeline returning Result model
-    let res = pkg::process("Analytics", 3, pkg::WebPriority.Critical)
-    say f"Outcome:   {res.message}"
+Protect an API in three lines:
+
+```alya
+import "web" as web
+
+function main()
+    let app = web::app()
+    app.use_bearer_auth("tok-123").use_rate_limit(100, 60000).use_keep_alive()
+    app.listen(8080)
 end
 
 main()
@@ -114,47 +118,65 @@ main()
 
 ## 📖 API Reference
 
-| Symbol | Visibility | Description |
-|---|---|---|
-| `hello(name = "World")` | `pub function` | Returns a formatted greeting string. Defaults to `"World"` if null or empty. |
-| `new_config(name, count, priority, style)` | `pub function` | Factory constructing a `WebConfig` with sensible defaults. |
-| `make_config(name, count, priority, style, enabled, tags)` | `pub function` | Full constructor for `WebConfig`. |
-| `process(label, count, priority)` | `pub function` | Runs processing pipeline, returning an `ok_result` `WebResult`. |
-| `process_batch(labels)` | `pub function` | Formats an array of labels in batch, returning an array of strings. |
-| `ok_result(value, message)` | `pub function` | Constructs a successful `WebResult` container (`status = 0`). |
-| `error_result(message, errors)` | `pub function` | Constructs a failed `WebResult` container (`status = 1`). |
-| `make_stats(total, passed, failed, skipped)` | `pub function` | Constructs a `WebStats` metrics record. |
-| `format_summary(cfg)` | `pub function` | Formats summary of a config instance (satisfies `Summarizable`). |
-| `format_description(cfg)` | `pub function` | Formats description of a config instance (satisfies `Describable`). |
-| `format_config(config)` | `pub function` | Multi-field formatter producing descriptive overview of a `WebConfig`. |
-| `format_result(result)` | `pub function` | Formats a `WebResult` into `[OK]` or `[ERROR]` status line. |
-| `format_stats(stats)` | `pub function` | Formats total checked items and success rate percentage. |
-| `clamp(n, min_val, max_val)` | `pub function` | Clamps an integer value to the closed range `[min_val, max_val]`. |
-| `pluralize(n, singular, plural)` | `pub function` | Pattern-matches count to return singular or plural noun form. |
-| `repeat_string(label, count)` | `pub function` | Repeats a string into an array of `count` items. |
-| `extra_greeting(name = "World")` | `pub function` (`extras` feature, default-on) | Enthusiastic greeting slice gated by `@cfg(feature = "extras")`; stub throws a descriptive error when the feature is off. |
-| `Summarizable` | `pub interface` | Structural contract requiring `summary(self) -> string`. |
-| `Describable` | `pub interface` | Structural contract requiring `describe(self) -> string` and `is_valid(self) -> int`. |
-| `WebStatus` | `pub enum` | Lifecycle status codes (`Pending = 0`, `Active = 1`, `Archived = 2`, `Error = 3`). |
-| `WebPriority` | `pub enum` | Priority tiers (`Low = 0`, `Normal = 1`, `High = 2`, `Critical = 3`). |
-| `WebStyle` | `pub enum` | Presentation styles (`Standard = 0`, `Formal = 1`, `Casual = 2`). |
-| `WebConfig` | `pub struct` | Primary configuration model (`name`, `count`, `priority`, `style`, `enabled`, `tags`). |
-| `WebConfig.summary()` | `pub method` | Single-line formatted summary (satisfies `Summarizable`). |
-| `WebConfig.describe()` | `pub method` | Detailed multi-field description (satisfies `Describable`). |
-| `WebConfig.is_valid()` | `pub method` | Validation guard returning 1 if valid, 0 otherwise. |
-| `WebConfig.is_enabled()` | `pub method` | Returns 1 if active, 0 if disabled. |
-| `WebConfig.with_name(new_name)` | `pub method` | Immutable copy with updated name. |
-| `WebConfig.with_priority(new_prio)` | `pub method` | Immutable copy with updated priority tier. |
-| `WebResult` | `pub struct` | Operation outcome model (`value`, `status`, `message`, `errors`). |
-| `WebResult.is_ok()` | `pub method` | Returns 1 if successful (`status == 0`), 0 otherwise. |
-| `WebResult.is_error()` | `pub method` | Returns 1 if error (`status != 0`), 0 otherwise. |
-| `WebResult.unwrap_or(fallback)` | `pub method` | Returns message on success, or fallback on error. |
-| `WebStats` | `pub struct` | Run statistics model (`total`, `passed`, `failed`, `skipped`). |
-| `WebStats.total_checked()` | `pub method` | Sum of passed and failed items count. |
-| `WebStats.success_rate()` | `pub method` | Computed percentage string (e.g. `"95%"`). |
+### App & Routing
 
-> [!TIP]
-> **Internal Helpers & Documentation:** Public symbols are documented with `##` Markdown docstrings, enabling automatic API documentation generation via `alya doc`. Private functions such as `build_salutation` and `build_priority_label` in `src/core/formatter.alya` are not annotated with `pub` and remain encapsulated within their respective modules.
+| Function | Parameters | Description |
+|---|---|---|
+| `app()` | — | Creates a new `App` with default settings |
+| `app_get/post/put/delete/patch/head/options/query/any(app, pattern, handler)` | `app: App, ...` | Registers a handler-function route |
+| `app_on(app, method, pattern, handler)` | `app: App, ...` | Registers a route for an explicit method |
+| `app_group(app, prefix)` | `app: App, prefix: string` | Creates a `WebGroup` under a path prefix |
+| `group_get/post/put/delete/patch/any(g, pattern, handler)` | `g: WebGroup, ...` | Registers a group route |
+| `group_on(g, method, pattern, handler)` | `g: WebGroup, ...` | Registers a group route for an explicit method |
+| `app_match(app, method, path)` | `app: App, ...` | Matches without invoking; returns the match result |
+| `app_dispatch(app, method, path, ctx)` | `app: App, ...` | Matches, injects params, and invokes the handler |
+| `App.get/post/...` `WebGroup.get/post/...` | methods | UFCS forms (`app.get("/x", h)`) |
+
+### Serving & Errors
+
+| Function | Parameters | Description |
+|---|---|---|
+| `listen(app, port, host, max_conns, timeout)` | `app: App, ...` | Builds, starts, serves, closes; `max_conns <= 0` serves forever |
+| `serve(app, srv, max_conns, ...)` | `app: App, srv, ...` | Serves connections on a started server |
+| `serve_once(app, srv, ...)` | `app: App, srv, ...` | Serves one connection with an error boundary |
+| `app_build_server(app, port, host)` | `app: App, ...` | Builds the configured `http` server (unstarted) |
+| `not_found(app, handler)` | `app: App, handler: fn(ctx)` | Custom handler for unmatched paths |
+| `App.on_error(app, handler)` | method `app.on_error(fn(ctx, err))` | Hook invoked after a handler throws (500 already set; no free form — see code note) |
+
+### Middleware (`use_*`, all chainable)
+
+| Function | Parameters | Description |
+|---|---|---|
+| `use_logger(app, enabled)` | `app: App, ...` | Access logging (`set_log_format` for templates) |
+| `use_cors(app, origin, methods, headers)` | `app: App, ...` | CORS headers + preflight |
+| `use_compression(app, min_length)` | `app: App, ...` | Response compression |
+| `use_static(app, prefix, dir)` | `app: App, ...` | Static file serving |
+| `use_basic_auth(app, user, pass)` | `app: App, ...` | HTTP Basic gate |
+| `use_bearer_auth(app, token)` | `app: App, ...` | Bearer token gate |
+| `use_jwt_auth(app, secret)` | `app: App, ...` | JWT (HS256) gate |
+| `use_rate_limit(app, limit, window_ms)` | `app: App, ...` | Fixed-window throttling (429) |
+| `use_request_id(app, enabled)` | `app: App, ...` | `X-Request-ID` tracing |
+| `use_timeout(app, ms)` | `app: App, ...` | Socket I/O timeout |
+| `use_limits(app, max_header, max_body)` | `app: App, ...` | Size caps with 413 rejection |
+| `use_keep_alive(app, max_requests)` | `app: App, ...` | Connection reuse |
+| `use_forwarded(app, enabled)` | `app: App, ...` | Trusted-proxy client identity |
+| `use_tls(app, cert, key)` | `app: App, ...` | TLS termination |
+
+### Context (`ctx_*`)
+
+| Function | Parameters | Description |
+|---|---|---|
+| `ctx_text/json/html(ctx, body, status)` | `ctx, ...` | Text, JSON string, and HTML responses |
+| `ctx_json_value(ctx, val, status)` | `ctx, ...` | Recursive native-value JSON |
+| `ctx_json_map(ctx, map, status)` | `ctx, ...` | Flat string-map JSON |
+| `ctx_body_json(ctx)` | `ctx` | Parses the request body as JSON |
+| `ctx_render(ctx, template, data, status)` | `ctx, ...` | Mustache template as HTML |
+| `ctx_redirect/not_found(ctx, ...)` | `ctx, ...` | Redirect and 404 helpers |
+| `ctx_param/param_int/query/body(ctx, ...)` | `ctx, ...` | Route params, query, and body readers |
+| `ctx_header/set_header/status(ctx, ...)` | `ctx, ...` | Header and status helpers |
+| `ctx_cookie/get_cookie(ctx, ...)` | `ctx, ...` | Cookie read/write |
+| `ctx_client_ip/scheme(ctx)` | `ctx` | Effective client IP and scheme |
+| `ctx_abort(ctx)` | `ctx` | Aborts pipeline processing |
 
 ---
 
@@ -166,11 +188,10 @@ Run the automated test suite using `alya test`:
 alya test
 ```
 
-Exercise feature selection (the `extras` slice is default-on):
+Exercise the full suite (no optional features in this package):
 
 ```bash
-alya test --features extras
-alya test --no-default-features
+alya test
 ```
 
 Generate static API documentation:

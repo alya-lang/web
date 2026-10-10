@@ -1,0 +1,229 @@
+## web Middleware settings (`use_*`).
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang).
+
+import "./types.alya"
+
+# NOTE: UFCS methods below carry inline bodies (no same-name delegation
+# to the free functions) so name resolution stays unambiguous.
+
+## Enables request logging. Chainable: `app.use_logger().use_cors()`.
+pub function use_logger(app: App, enabled: int = 1)
+    app.options["logger_enabled"] = enabled
+    return app
+end
+
+## Sets a custom access-log template.
+pub function set_log_format(app: App, format: string)
+    app.options["log_format"] = format
+    return app
+end
+
+## Enables CORS with the given origin, methods, and headers.
+pub function use_cors(app: App, origin: string = "*", methods = "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH, QUERY", headers = "Content-Type, Authorization, X-Requested-With")
+    app.options["cors_enabled"] = 1
+    app.options["cors_origin"] = origin
+    app.options["cors_methods"] = methods
+    app.options["cors_headers"] = headers
+    return app
+end
+
+## Enables response compression for bodies >= `min_length` bytes.
+pub function use_compression(app: App, min_length: int = 256)
+    app.options["compression_enabled"] = 1
+    app.options["compression_min"] = min_length
+    return app
+end
+
+## Serves `local_dir` under `url_prefix` with MIME detection.
+pub function use_static(app: App, url_prefix: string, local_dir: string)
+    app.options["static_enabled"] = 1
+    app.options["static_prefix"] = url_prefix
+    app.options["static_dir"] = local_dir
+    return app
+end
+
+## Requires HTTP Basic credentials for every route.
+pub function use_basic_auth(app: App, username: string, password: string)
+    app.options["auth_enabled"] = 1
+    app.options["auth_kind"] = "basic"
+    app.options["auth_user"] = username
+    app.options["auth_pass"] = password
+    return app
+end
+
+## Requires a Bearer token for every route.
+pub function use_bearer_auth(app: App, token: string)
+    app.options["auth_enabled"] = 1
+    app.options["auth_kind"] = "bearer"
+    app.options["auth_token"] = token
+    return app
+end
+
+## Requires a valid JWT (HS256) for every route.
+pub function use_jwt_auth(app: App, secret: string)
+    app.options["auth_enabled"] = 1
+    app.options["auth_kind"] = "jwt"
+    app.options["auth_secret"] = secret
+    return app
+end
+
+## Throttles clients to `limit` hits per `window_ms` (by remote address).
+pub function use_rate_limit(app: App, limit: int = 100, window_ms: int = 60000)
+    app.options["rate_limit_enabled"] = 1
+    app.options["rate_limit"] = limit
+    app.options["rate_window_ms"] = window_ms
+    return app
+end
+
+## Tags every response with an `X-Request-ID`.
+pub function use_request_id(app: App, enabled: int = 1)
+    app.options["request_id_enabled"] = enabled
+    return app
+end
+
+## Bounds socket I/O waits for accepted connections.
+pub function use_timeout(app: App, timeout_ms: int = 5000)
+    app.options["timeout_ms"] = timeout_ms
+    return app
+end
+
+## Caps request header/body bytes (413 on overflow).
+pub function use_limits(app: App, max_header_size: int = 1048576, max_body_size: int = 8388608)
+    app.options["max_header_size"] = max_header_size
+    app.options["max_body_size"] = max_body_size
+    return app
+end
+
+## Reuses connections for sequential requests (HTTP/1.1 keep-alive).
+pub function use_keep_alive(app: App, max_requests: int = 100)
+    app.options["keep_alive_enabled"] = 1
+    app.options["keep_alive_max"] = max_requests
+    return app
+end
+
+## Trusts proxy headers for client identity (behind known proxies only).
+pub function use_forwarded(app: App, enabled: int = 1)
+    app.options["forwarded_enabled"] = enabled
+    return app
+end
+
+## Terminates TLS with a PEM certificate chain and private key.
+pub function use_tls(app: App, cert_pem: string, key_pem: string)
+    app.options["tls_enabled"] = 1
+    app.options["tls_cert"] = cert_pem
+    app.options["tls_key"] = key_pem
+    return app
+end
+
+# ───────────────────────────────────────────────────────────────
+# UFCS struct methods (method forms, all chainable; inline bodies)
+# ───────────────────────────────────────────────────────────────
+
+## Enables request logging (method form).
+pub function App.use_logger(self: App, enabled: int = 1)
+    self.options["logger_enabled"] = enabled
+    return self
+end
+
+## Sets a custom access-log template (method form).
+pub function App.set_log_format(self: App, format: string)
+    self.options["log_format"] = format
+    return self
+end
+
+## Enables CORS (method form).
+pub function App.use_cors(self: App, origin: string = "*", methods = "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH, QUERY", headers = "Content-Type, Authorization, X-Requested-With")
+    self.options["cors_enabled"] = 1
+    self.options["cors_origin"] = origin
+    self.options["cors_methods"] = methods
+    self.options["cors_headers"] = headers
+    return self
+end
+
+## Enables response compression (method form).
+pub function App.use_compression(self: App, min_length: int = 256)
+    self.options["compression_enabled"] = 1
+    self.options["compression_min"] = min_length
+    return self
+end
+
+## Serves static files (method form).
+pub function App.use_static(self: App, url_prefix: string, local_dir: string)
+    self.options["static_enabled"] = 1
+    self.options["static_prefix"] = url_prefix
+    self.options["static_dir"] = local_dir
+    return self
+end
+
+## Requires HTTP Basic credentials (method form).
+pub function App.use_basic_auth(self: App, username: string, password: string)
+    self.options["auth_enabled"] = 1
+    self.options["auth_kind"] = "basic"
+    self.options["auth_user"] = username
+    self.options["auth_pass"] = password
+    return self
+end
+
+## Requires a Bearer token (method form).
+pub function App.use_bearer_auth(self: App, token: string)
+    self.options["auth_enabled"] = 1
+    self.options["auth_kind"] = "bearer"
+    self.options["auth_token"] = token
+    return self
+end
+
+## Requires a valid JWT (method form).
+pub function App.use_jwt_auth(self: App, secret: string)
+    self.options["auth_enabled"] = 1
+    self.options["auth_kind"] = "jwt"
+    self.options["auth_secret"] = secret
+    return self
+end
+
+## Throttles clients (method form).
+pub function App.use_rate_limit(self: App, limit: int = 100, window_ms: int = 60000)
+    self.options["rate_limit_enabled"] = 1
+    self.options["rate_limit"] = limit
+    self.options["rate_window_ms"] = window_ms
+    return self
+end
+
+## Tags responses with request IDs (method form).
+pub function App.use_request_id(self: App, enabled: int = 1)
+    self.options["request_id_enabled"] = enabled
+    return self
+end
+
+## Bounds socket I/O waits (method form).
+pub function App.use_timeout(self: App, timeout_ms: int = 5000)
+    self.options["timeout_ms"] = timeout_ms
+    return self
+end
+
+## Caps request sizes (method form).
+pub function App.use_limits(self: App, max_header_size: int = 1048576, max_body_size: int = 8388608)
+    self.options["max_header_size"] = max_header_size
+    self.options["max_body_size"] = max_body_size
+    return self
+end
+
+## Reuses connections (method form).
+pub function App.use_keep_alive(self: App, max_requests: int = 100)
+    self.options["keep_alive_enabled"] = 1
+    self.options["keep_alive_max"] = max_requests
+    return self
+end
+
+## Trusts proxy headers (method form).
+pub function App.use_forwarded(self: App, enabled: int = 1)
+    self.options["forwarded_enabled"] = enabled
+    return self
+end
+
+## Terminates TLS (method form).
+pub function App.use_tls(self: App, cert_pem: string, key_pem: string)
+    self.options["tls_enabled"] = 1
+    self.options["tls_cert"] = cert_pem
+    self.options["tls_key"] = key_pem
+    return self
+end

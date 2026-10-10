@@ -1,77 +1,41 @@
-## Benchmark suite for web
+## Micro-benchmarks for the web framework package
 ## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
+import "std/bench"
+import "http" as http
+import "../src/lib.alya" as web
 
-import "std/test"
-import "../src/lib.alya" as pkg
+function bench_hello(ctx)
+    return web::ctx_text(ctx, "hi", 200)
+end
 
 function main()
-    let runner = bench_runner("web Micro-Benchmarks")
+    let runner = bench_runner("alya-lang/web Micro-Benchmarks")
 
-    # Bench 1: hello() facade function — 100k iterations
-    bench_start(runner, 100000)
+    let app = web::app()
     let i = 0
-    while i < 100000
-        pkg::hello("Alya")
+    while i < 50
+        app.get("/r" + str(i) + "/:id", bench_hello)
         i += 1
     end
-    bench_stop(runner, "hello() 100k calls")
 
-    # Bench 2: process() default call — 100k iterations
-    bench_start(runner, 100000)
+    # 1. Route match throughput
+    bench_start(runner, 20000)
     let j = 0
-    while j < 100000
-        pkg::process()
+    while j < 20000
+        web::app_match(app, "GET", "/r25/42")
         j += 1
     end
-    bench_stop(runner, "process() default 100k calls")
+    bench_stop(runner, "App route match (50 routes)")
 
-    # Bench 3: make_config + format_config — 50k iterations
-    bench_start(runner, 50000)
+    # 2. Dispatch throughput (match + params + invoke)
+    bench_start(runner, 20000)
     let k = 0
-    while k < 50000
-        let cfg = pkg::new_config("bench", 1, pkg::WebPriority.High, pkg::WebStyle.Formal)
-        pkg::core_format_custom(cfg)
+    while k < 20000
+        let ctx = http::ctx_new(http::request_create("GET", "/r25/42"), http::response())
+        web::app_dispatch(app, "GET", "/r25/42", ctx)
         k += 1
     end
-    bench_stop(runner, "new_config + format_custom 50k calls")
-
-    # Bench 4: process_batch with 10-element array — 10k iterations
-    let labels = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
-    bench_start(runner, 10000)
-    let m = 0
-    while m < 10000
-        pkg::process_batch(labels)
-        m += 1
-    end
-    bench_stop(runner, "process_batch 10-item list 10k calls")
-
-    # Bench 5: struct method cfg.summary() — 200k iterations
-    let summ_cfg = pkg::new_config("summary-bench", 5)
-    bench_start(runner, 200000)
-    let s = 0
-    while s < 200000
-        summ_cfg.summary()
-        s += 1
-    end
-    bench_stop(runner, "cfg.summary() 200k calls")
-
-    # Bench 6: clamp() utility — 500k iterations
-    bench_start(runner, 500000)
-    let c = 0
-    while c < 500000
-        pkg::clamp(c, 0, 100)
-        c += 1
-    end
-    bench_stop(runner, "clamp() utility 500k calls")
-
-    # Bench 7: repeat_string() utility — 10k iterations
-    bench_start(runner, 10000)
-    let r = 0
-    while r < 10000
-        pkg::repeat_string("bench", 10)
-        r += 1
-    end
-    bench_stop(runner, "repeat_string() 10k calls")
+    bench_stop(runner, "App dispatch with handler invoke")
 
     bench_summary(runner)
 end

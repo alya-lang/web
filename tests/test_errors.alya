@@ -1,0 +1,91 @@
+## Test suite for web error boundaries (404s and handler failures)
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
+import "std/test"
+import "std/net" as net
+import "http" as http
+import "../src/lib.alya" as web
+
+function err_ok(ctx)
+    return web::ctx_text(ctx, "fine", 200)
+end
+
+function err_missing(ctx)
+    return web::ctx_json_map(ctx, {"error": "custom-missing"}, 404)
+end
+
+function err_fail(_ctx)
+    throw "bang"
+end
+
+function err_page(ctx, err)
+    return web::ctx_text(ctx, "oops:" + str(err), 500)
+end
+
+function main()
+    test_suite("web Errors Tests")
+    let r = runner_new()
+
+    # 1. Default 404 without a hook: drive a miss through serve
+    let app = web::app()
+    app.get("/ok", err_ok)
+    let srv2 = web::app_build_server(app, 19994, "127.0.0.1")
+    http::server_start(srv2)
+    let c2 = net::tcp_connect("127.0.0.1", 19994)
+    net::tcp_set_timeout(c2, 5000)
+    net::tcp_send(c2, "GET /nope HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+    let n1 = web::serve(app, srv2, 1, 3000)
+    runner_assert_eq(r, n1, 1, "miss served")
+    let w1 = ""
+    if net::tcp_poll(c2, 3000) == true
+        w1 = net::tcp_recv(c2, 4096)
+    end
+    net::tcp_close(c2)
+    runner_assert_eq(r, http::http_parse_response(w1).status_code, 404, "default 404")
+
+    # 2. Custom not-found hook
+    let app2 = web::app()
+    app2.get("/ok", err_ok)
+    app2.not_found(err_missing)
+    let srv3 = web::app_build_server(app2, 19995, "127.0.0.1")
+    http::server_start(srv3)
+    let c3 = net::tcp_connect("127.0.0.1", 19995)
+    net::tcp_set_timeout(c3, 5000)
+    net::tcp_send(c3, "GET /nope HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+    web::serve(app2, srv3, 1, 3000)
+    let w2 = ""
+    if net::tcp_poll(c3, 3000) == true
+        w2 = net::tcp_recv(c3, 4096)
+    end
+    net::tcp_close(c3)
+    http::server_close(srv3)
+    let p2 = http::http_parse_response(w2)
+    runner_assert_eq(r, p2.status_code, 404, "custom 404 status")
+    runner_assert(r, index_of(p2.body, "custom-missing") >= 0, "custom 404 body")
+
+    # 3. on_error hook overwrites the default 500
+    let app3 = web::app()
+    app3.get("/fail", err_fail)
+    app3.on_error(err_page)
+    let srv4 = web::app_build_server(app3, 19996, "127.0.0.1")
+    http::server_start(srv4)
+    let c4 = net::tcp_connect("127.0.0.1", 19996)
+    net::tcp_set_timeout(c4, 5000)
+    net::tcp_send(c4, "GET /fail HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+    web::serve(app3, srv4, 1, 3000)
+    let w3 = ""
+    if net::tcp_poll(c4, 3000) == true
+        w3 = net::tcp_recv(c4, 4096)
+    end
+    net::tcp_close(c4)
+    http::server_close(srv4)
+    let p3 = http::http_parse_response(w3)
+    runner_assert_eq(r, p3.status_code, 500, "hooked 500 status")
+    runner_assert(r, index_of(p3.body, "oops:") >= 0, "hooked 500 body")
+
+    let failed = runner_summary(r)
+    if failed > 0
+        exit(1)
+    end
+end
+
+main()

@@ -1,0 +1,69 @@
+## Test suite for web App construction, routes, and groups
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
+import "std/test"
+import "http" as http
+import "../src/lib.alya" as web
+
+function app_hello(ctx)
+    return web::ctx_text(ctx, "hello web", 200)
+end
+
+function app_user(ctx)
+    return web::ctx_text(ctx, "user:" + web::ctx_param(ctx, "id"), 200)
+end
+
+function main()
+    test_suite("web App Tests")
+    let r = runner_new()
+
+    # 1. Construction defaults
+    let app = web::app()
+    runner_assert_eq(r, app.options["logger_enabled"], 0, "logger off by default")
+    runner_assert_eq(r, app.options["timeout_ms"], 5000, "default timeout 5s")
+    runner_assert_eq(r, len(app.router.routes), 0, "no routes initially")
+
+    # 2. Free-function route registration
+    web::app_get(app, "/hello", app_hello)
+    web::app_post(app, "/users/:id", app_user)
+    web::app_put(app, "/p", app_hello)
+    web::app_delete(app, "/d", app_hello)
+    web::app_patch(app, "/p2", app_hello)
+    web::app_any(app, "/any", app_hello)
+    runner_assert_eq(r, len(app.router.routes), 6, "six routes registered")
+
+    # 3. UFCS method registration and chaining
+    let app2 = web::app()
+    app2.get("/a", app_hello).post("/b", app_user).put("/c", app_hello).delete("/d", app_hello).patch("/e", app_hello).any("/f", app_hello).on("QUERY", "/q", app_hello)
+    runner_assert_eq(r, len(app2.router.routes), 7, "method chain registers seven")
+
+    # 4. Groups with prefixes and sub-groups
+    let g = web::app_group(app, "/api/v1")
+    web::group_get(g, "/status", app_hello)
+    let sub = web::group_group(g, "/auth")
+    web::group_post(sub, "/login", app_user)
+    let m1 = web::app_match(app, "GET", "/api/v1/status")
+    runner_assert_eq(r, m1.found, 1, "group route found")
+    let m2 = web::app_match(app, "POST", "/api/v1/auth/login")
+    runner_assert_eq(r, m2.found, 1, "nested group route found")
+
+    # 5. Group method forms
+    let g2 = app2.group("/v2")
+    g2.get("/x", app_hello)
+    g2.post("/y", app_user)
+    let m3 = web::app_match(app2, "GET", "/v2/x")
+    runner_assert_eq(r, m3.found, 1, "group method route found")
+
+    # 6. Dispatch invokes handlers with params
+    let dctx = http::ctx_new(http::request_create("POST", "/users/42"))
+    let m4 = web::app_dispatch(app, "POST", "/users/42", dctx)
+    runner_assert_eq(r, m4.found, 1, "param route found")
+    runner_assert_str_eq(r, dctx.res.body, "user:42", "handler ran with params")
+    runner_assert_eq(r, m4.found, 1, "param route found")
+
+    let failed = runner_summary(r)
+    if failed > 0
+        exit(1)
+    end
+end
+
+main()

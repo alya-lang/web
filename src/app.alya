@@ -1,0 +1,423 @@
+## web Application: routes, settings, and serving.
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang).
+
+import "http" as http
+import "std/net" as net
+import "./types.alya"
+
+# ───────────────────────────────────────────────────────────────
+# Route registration (free functions)
+# ───────────────────────────────────────────────────────────────
+
+## Registers a GET route with a handler function.
+pub function app_get(app: App, pattern: string, handler)
+    http::router_on_get(app.router, pattern, handler)
+    return app
+end
+
+## Registers a POST route with a handler function.
+pub function app_post(app: App, pattern: string, handler)
+    http::router_on_post(app.router, pattern, handler)
+    return app
+end
+
+## Registers a PUT route with a handler function.
+pub function app_put(app: App, pattern: string, handler)
+    http::router_on_put(app.router, pattern, handler)
+    return app
+end
+
+## Registers a DELETE route with a handler function.
+pub function app_delete(app: App, pattern: string, handler)
+    http::router_on_delete(app.router, pattern, handler)
+    return app
+end
+
+## Registers a PATCH route with a handler function.
+pub function app_patch(app: App, pattern: string, handler)
+    http::router_on_patch(app.router, pattern, handler)
+    return app
+end
+
+## Registers a HEAD route with a handler function.
+pub function app_head(app: App, pattern: string, handler)
+    http::router_on_head(app.router, pattern, handler)
+    return app
+end
+
+## Registers an OPTIONS route with a handler function.
+pub function app_options(app: App, pattern: string, handler)
+    http::router_on_options(app.router, pattern, handler)
+    return app
+end
+
+## Registers a QUERY route with a handler function.
+pub function app_query(app: App, pattern: string, handler)
+    http::router_on_query(app.router, pattern, handler)
+    return app
+end
+
+## Registers a route matching ANY HTTP method with a handler function.
+pub function app_any(app: App, pattern: string, handler)
+    http::router_on_any(app.router, pattern, handler)
+    return app
+end
+
+## Registers a handler-function route for an explicit method.
+pub function app_on(app: App, method, pattern: string, handler)
+    http::router_on(app.router, method, pattern, handler)
+    return app
+end
+
+## Creates a route group with a common path prefix.
+pub function app_group(app: App, prefix: string) -> WebGroup
+    return group_new(app, prefix)
+end
+
+## Registers a handler-function group route for an explicit method.
+pub function group_on(g: WebGroup, method, pattern: string, handler)
+    http::router_group_on(g.app.router, g.prefix, method, pattern, handler)
+    return g
+end
+
+## Registers a GET group route with a handler function.
+pub function group_get(g: WebGroup, pattern: string, handler)
+    return group_on(g, "GET", pattern, handler)
+end
+
+## Registers a POST group route with a handler function.
+pub function group_post(g: WebGroup, pattern: string, handler)
+    return group_on(g, "POST", pattern, handler)
+end
+
+## Registers a PUT group route with a handler function.
+pub function group_put(g: WebGroup, pattern: string, handler)
+    return group_on(g, "PUT", pattern, handler)
+end
+
+## Registers a DELETE group route with a handler function.
+pub function group_delete(g: WebGroup, pattern: string, handler)
+    return group_on(g, "DELETE", pattern, handler)
+end
+
+## Registers a PATCH group route with a handler function.
+pub function group_patch(g: WebGroup, pattern: string, handler)
+    return group_on(g, "PATCH", pattern, handler)
+end
+
+## Registers an ANY-method group route with a handler function.
+pub function group_any(g: WebGroup, pattern: string, handler)
+    return group_on(g, "ANY", pattern, handler)
+end
+
+## Creates a nested sub-group under a group prefix.
+pub function group_group(g: WebGroup, sub_prefix: string) -> WebGroup
+    return group_new(g.app, _web_join_prefix(g.prefix, sub_prefix))
+end
+
+## Joins prefix and pattern cleanly.
+pub function _web_join_prefix(prefix: string, pattern: string) -> string
+    if prefix is null or prefix == "" or prefix == "/"
+        return pattern
+    end
+    let p = prefix
+    if substring(p, len(p) - 1, 1) == "/"
+        p = substring(p, 0, len(p) - 1)
+    end
+    let pat = pattern
+    if substring(pat, 0, 1) == "/"
+        pat = substring(pat, 1, len(pat) - 1)
+    end
+    if pat == ""
+        return p
+    end
+    return p + "/" + pat
+end
+
+# ───────────────────────────────────────────────────────────────
+# Route registration (UFCS struct methods; bodies are inline so no
+# same-name delegation confuses resolution)
+# ───────────────────────────────────────────────────────────────
+
+## Registers a GET route (method form: `app.get("/x", h)`).
+pub function App.get(self: App, pattern: string, handler)
+    http::router_on_get(self.router, pattern, handler)
+    return self
+end
+
+## Registers a POST route (method form).
+pub function App.post(self: App, pattern: string, handler)
+    http::router_on_post(self.router, pattern, handler)
+    return self
+end
+
+## Registers a PUT route (method form).
+pub function App.put(self: App, pattern: string, handler)
+    http::router_on_put(self.router, pattern, handler)
+    return self
+end
+
+## Registers a DELETE route (method form).
+pub function App.delete(self: App, pattern: string, handler)
+    http::router_on_delete(self.router, pattern, handler)
+    return self
+end
+
+## Registers a PATCH route (method form).
+pub function App.patch(self: App, pattern: string, handler)
+    http::router_on_patch(self.router, pattern, handler)
+    return self
+end
+
+## Registers an ANY-method route (method form).
+pub function App.any(self: App, pattern: string, handler)
+    http::router_on_any(self.router, pattern, handler)
+    return self
+end
+
+## Registers a handler route for an explicit method (method form).
+pub function App.on(self: App, method, pattern: string, handler)
+    http::router_on(self.router, method, pattern, handler)
+    return self
+end
+
+## Creates a route group (method form: `app.group("/api")`).
+pub function App.group(self: App, prefix: string) -> WebGroup
+    return group_new(self, prefix)
+end
+
+## Registers a GET group route (method form).
+pub function WebGroup.get(self: WebGroup, pattern: string, handler)
+    http::router_group_on(self.app.router, self.prefix, "GET", pattern, handler)
+    return self
+end
+
+## Registers a POST group route (method form).
+pub function WebGroup.post(self: WebGroup, pattern: string, handler)
+    http::router_group_on(self.app.router, self.prefix, "POST", pattern, handler)
+    return self
+end
+
+## Registers a PUT group route (method form).
+pub function WebGroup.put(self: WebGroup, pattern: string, handler)
+    http::router_group_on(self.app.router, self.prefix, "PUT", pattern, handler)
+    return self
+end
+
+## Registers a DELETE group route (method form).
+pub function WebGroup.delete(self: WebGroup, pattern: string, handler)
+    http::router_group_on(self.app.router, self.prefix, "DELETE", pattern, handler)
+    return self
+end
+
+## Registers a PATCH group route (method form).
+pub function WebGroup.patch(self: WebGroup, pattern: string, handler)
+    http::router_group_on(self.app.router, self.prefix, "PATCH", pattern, handler)
+    return self
+end
+
+## Registers an ANY-method group route (method form).
+pub function WebGroup.any(self: WebGroup, pattern: string, handler)
+    http::router_group_on(self.app.router, self.prefix, "ANY", pattern, handler)
+    return self
+end
+
+# ───────────────────────────────────────────────────────────────
+# Error handlers
+# ───────────────────────────────────────────────────────────────
+
+## Sets the custom not-found handler `fn(ctx)` for unmatched paths.
+pub function not_found(app: App, handler)
+    app.options["not_found"] = handler
+    return app
+end
+
+## Sets the error handler (method form: `app.on_error(fn)`).
+## The context already carries a 500 JSON response; the handler may
+## overwrite it (custom error pages, logging).
+# NOTE: no free `on_error` by design: that bare name collides with an
+# `on_error` method suffix from another package and breaks run-mode
+# resolution (see alya-lang/alya#158).
+
+## Sets the custom not-found handler (method form).
+pub function App.not_found(self: App, handler)
+    self.options["not_found"] = handler
+    return self
+end
+
+## Sets the error handler (method form).
+pub function App.on_error(self: App, handler)
+    self.options["on_error"] = handler
+    return self
+end
+
+## Matches a request against the app router without invoking anything.
+pub function app_match(app: App, method, path: string)
+    return http::router_match(app.router, method, path)
+end
+
+## Matches, injects params, and invokes the handler on `ctx`.
+## Returns the match result for status inspection.
+pub function app_dispatch(app: App, method, path: string, ctx)
+    return http::router_dispatch(app.router, method, path, ctx)
+end
+
+# Applies the app settings to a fresh `http` server (built, not started).
+pub function app_build_server(app: App, port: int = 8080, host: string = "0.0.0.0")
+    let srv = http::server(port, host, app.router)
+    let o = app.options
+    if o["logger_enabled"] == true
+        http::server_enable_logger(srv, 1)
+        if o["log_format"] != ""
+            http::server_set_log_format(srv, o["log_format"])
+        end
+    end
+    if o["cors_enabled"] == true
+        http::server_enable_cors(srv, o["cors_origin"], o["cors_methods"], o["cors_headers"])
+    end
+    if o["compression_enabled"] == true
+        http::server_enable_compression(srv, o["compression_min"])
+    end
+    if o["static_enabled"] == true
+        http::server_enable_static(srv, o["static_prefix"], o["static_dir"])
+    end
+    if o["auth_enabled"] == true
+        when o["auth_kind"]
+            is "basic" then http::server_enable_basic_auth(srv, o["auth_user"], o["auth_pass"])
+            is "bearer" then http::server_enable_bearer_auth(srv, o["auth_token"])
+            is "jwt" then http::server_enable_jwt_auth(srv, o["auth_secret"])
+            else http::server_enable_basic_auth(srv, o["auth_user"], o["auth_pass"])
+        end
+    end
+    if o["rate_limit_enabled"] == true
+        http::server_enable_rate_limit(srv, o["rate_limit"], o["rate_window_ms"])
+    end
+    if o["request_id_enabled"] == true
+        http::server_enable_request_id(srv, 1)
+    end
+    if o["timeout_ms"] != 5000
+        http::server_enable_timeout(srv, o["timeout_ms"])
+    end
+    if o["max_header_size"] != 1048576 or o["max_body_size"] != 8388608
+        http::server_enable_limits(srv, o["max_header_size"], o["max_body_size"])
+    end
+    if o["keep_alive_enabled"] == true
+        http::server_enable_keep_alive(srv, 1, o["keep_alive_max"])
+    end
+    if o["forwarded_enabled"] == true
+        http::server_enable_forwarded(srv, 1)
+    end
+    if o["tls_enabled"] == true
+        http::server_enable_tls(srv, o["tls_cert"], o["tls_key"])
+    end
+    return srv
+end
+
+# Invokes the error boundary: default 500 JSON, then the `on_error` hook.
+function _web_fail(app: App, ctx, err)
+    http::recovery(ctx, "Internal Server Error")
+    let hook = app.options["on_error"]
+    if hook is not null
+        try
+            hook(ctx, err)
+        catch hook_err
+            # Error hooks must never break the serve loop.
+        end
+    end
+    return ctx
+end
+
+# Handles unmatched paths: custom `not_found` hook or the default 404.
+function _web_miss(app: App, ctx)
+    let hook = app.options["not_found"]
+    if hook is not null
+        try
+            hook(ctx)
+        catch err
+            _web_fail(app, ctx, err)
+        end
+    end
+    return ctx
+end
+
+## Serves one accepted connection with an error boundary: handler throws
+## become 500 responses (plus the `on_error` hook) instead of killing the
+## loop. Returns the number of served requests. The server must be started.
+pub function serve_once(app: App, srv, timeout_ms: int = 1000, max_requests: int = 100) -> int
+    if srv is null
+        return 0
+    end
+    let ctx = http::server_accept(srv, timeout_ms)
+    if ctx is null
+        return 0
+    end
+    let o = app.options
+    let served = 0
+    let sock = ctx.client_sock
+    while ctx is not null
+        let m = http::server_process(srv, ctx)
+        if ctx.aborted != true and m.found == true
+            try
+                http::router_dispatch_match(m, ctx)
+            catch err
+                _web_fail(app, ctx, err)
+            end
+        elif ctx.aborted != true and m.found == false
+            _web_miss(app, ctx)
+        end
+        http::server_send(srv, ctx)
+        served += 1
+        sock = ctx.client_sock
+        if sock < 0
+            break
+        end
+        if max_requests > 0 and served >= max_requests
+            break
+        end
+        ctx = http::server_read_request(sock, o["timeout_ms"], o["max_header_size"], o["max_body_size"])
+    end
+    if sock >= 0
+        net::tcp_close(sock)
+    end
+    return served
+end
+
+## Serves up to `max_connections` connections (`<= 0` loops forever).
+## Returns the total number of served requests.
+pub function serve(app: App, srv, max_connections: int = 1, timeout_ms: int = 1000, max_requests: int = 100) -> int
+    if srv is null
+        return 0
+    end
+    let total = 0
+    if max_connections <= 0
+        while 1
+            total += serve_once(app, srv, timeout_ms, max_requests)
+        end
+    end
+    let done = 0
+    while done < max_connections
+        total += serve_once(app, srv, timeout_ms, max_requests)
+        done += 1
+    end
+    return total
+end
+
+## Builds, starts, serves, and closes: the one-call production entry point.
+## `max_connections <= 0` serves forever (use Ctrl+C to stop).
+## Returns the total number of served requests.
+pub function listen(app: App, port: int = 8080, host: string = "0.0.0.0", max_connections: int = 0, timeout_ms: int = 1000) -> int
+    let srv = app_build_server(app, port, host)
+    http::server_start(srv)
+    let total = serve(app, srv, max_connections, timeout_ms)
+    http::server_close(srv)
+    return total
+end
+
+## Starts listening: method form of `listen`.
+pub function App.listen(self: App, port: int = 8080, host: string = "0.0.0.0", max_connections: int = 0) -> int
+    let srv = app_build_server(self, port, host)
+    http::server_start(srv)
+    let total = serve(self, srv, max_connections, 1000)
+    http::server_close(srv)
+    return total
+end

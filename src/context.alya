@@ -1,0 +1,110 @@
+## web Context helpers: terse handler ergonomics over `http`.
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang).
+
+import "http" as http
+import "./types.alya"
+
+## Sends a plain text response.
+pub function ctx_text(ctx, text_content: string, status_code: int = 200)
+    return http::ctx_text(ctx, text_content, status_code)
+end
+
+## Sends a raw JSON string response.
+pub function ctx_json(ctx, json_content: string, status_code: int = 200)
+    return http::ctx_json(ctx, json_content, status_code)
+end
+
+## Sends any native value as recursive JSON.
+pub function ctx_json_value(ctx, val, status_code: int = 200)
+    return http::ctx_json_value(ctx, val, status_code)
+end
+
+## Sends a flat string map as a quoted JSON object.
+pub function ctx_json_map(ctx, m, status_code: int = 200)
+    return http::ctx_json_map(ctx, m, status_code)
+end
+
+## Parses the request body as JSON (null when empty/invalid).
+pub function ctx_body_json(ctx)
+    return http::ctx_body_json(ctx)
+end
+
+## Sends an HTML response.
+pub function ctx_html(ctx, html_content: string, status_code: int = 200)
+    return http::ctx_html(ctx, html_content, status_code)
+end
+
+## Renders a Mustache template string as HTML.
+pub function ctx_render(ctx, template_str: string, data, status_code: int = 200)
+    return http::ctx_render(ctx, template_str, data, status_code)
+end
+
+## Sends a redirect response.
+pub function ctx_redirect(ctx, target_url: string, status_code: int = 302)
+    return http::ctx_redirect(ctx, target_url, status_code)
+end
+
+## Sends a 404 response.
+pub function ctx_not_found(ctx, message: string = "Not Found")
+    return http::ctx_not_found(ctx, message)
+end
+
+## Retrieves a route path parameter by name.
+pub function ctx_param(ctx, name: string, default_val: string = "") -> string
+    return http::ctx_param(ctx, name, default_val)
+end
+
+## Retrieves a route path parameter parsed as integer.
+pub function ctx_param_int(ctx, name: string, default_val: int = 0) -> int
+    return http::ctx_param_int(ctx, name, default_val)
+end
+
+## Retrieves a query string parameter by key.
+pub function ctx_query(ctx, name: string, default_val: string = "") -> string
+    return http::ctx_query(ctx, name, default_val)
+end
+
+## Retrieves the raw request body.
+pub function ctx_body(ctx) -> string
+    return http::ctx_body(ctx)
+end
+
+## Retrieves a request header (case-insensitive).
+pub function ctx_header(ctx, key: string, default_val: string = "") -> string
+    return http::ctx_get_header(ctx, key, default_val)
+end
+
+## Sets a response header.
+pub function ctx_set_header(ctx, key: string, val)
+    return http::ctx_header(ctx, key, val)
+end
+
+## Sets the response status code.
+pub function ctx_status(ctx, code: int, text: string = "")
+    return http::ctx_status(ctx, code, text)
+end
+
+## Retrieves an incoming cookie value by name.
+pub function ctx_get_cookie(ctx, name: string, default_val: string = "") -> string
+    return http::ctx_get_cookie(ctx, name, default_val)
+end
+
+## Sets a response cookie.
+pub function ctx_cookie(ctx, name: string, val, path: string = "/", max_age: int = -1, http_only: int = 0, secure: int = 0, same_site: string = "Lax")
+    return http::ctx_cookie(ctx, name, val, path, max_age, http_only, secure, same_site)
+end
+
+## Returns the effective client IP behind trusted proxies.
+pub function ctx_client_ip(ctx) -> string
+    return http::ctx_client_ip(ctx)
+end
+
+## Returns the effective request scheme.
+pub function ctx_scheme(ctx) -> string
+    return http::ctx_scheme(ctx)
+end
+
+## Aborts request pipeline processing.
+pub function ctx_abort(ctx)
+    return http::ctx_abort(ctx)
+end

@@ -1,0 +1,96 @@
+## Test suite for web live serving over real sockets
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
+import "std/test"
+import "std/net" as net
+import "http" as http
+import "../src/lib.alya" as web
+
+function serve_hello(ctx)
+    return web::ctx_json_map(ctx, {"message": "Hello"})
+end
+
+function serve_echo(ctx)
+    let name = web::ctx_param(ctx, "name")
+    let q = web::ctx_query(ctx, "q", "none")
+    return web::ctx_text(ctx, "echo:" + name + ":" + q, 200)
+end
+
+function serve_boom(_ctx)
+    throw "simulated handler failure"
+end
+
+function main()
+    test_suite("web Serve Tests")
+    let r = runner_new()
+
+    let app = web::app()
+    app.get("/hello", serve_hello)
+    app.post("/echo/:name", serve_echo)
+    app.get("/boom", serve_boom)
+    app.use_request_id()
+
+    let srv = web::app_build_server(app, 19992, "127.0.0.1")
+    http::server_start(srv)
+    runner_assert_eq(r, srv.running, 1, "server listening")
+
+    # 1. JSON route over a live connection
+    let c1 = net::tcp_connect("127.0.0.1", 19992)
+    runner_assert(r, c1 >= 0, "client connected")
+    net::tcp_set_timeout(c1, 5000)
+    net::tcp_send(c1, "GET /hello HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+    let n1 = web::serve(app, srv, 1, 3000)
+    runner_assert_eq(r, n1, 1, "one request served")
+    let w1 = ""
+    if net::tcp_poll(c1, 3000) == true
+        w1 = net::tcp_recv(c1, 4096)
+    end
+    net::tcp_close(c1)
+    let p1 = http::http_parse_response(w1)
+    runner_assert_eq(r, p1.status_code, 200, "hello status 200")
+    runner_assert(r, index_of(p1.body, "\"Hello\"") >= 0, "hello body")
+    runner_assert(r, http::header_get(p1.headers, "X-Request-ID") != "", "request id tagged")
+
+    # 2. Params and query strings
+    let c2 = net::tcp_connect("127.0.0.1", 19992)
+    net::tcp_set_timeout(c2, 5000)
+    net::tcp_send(c2, "POST /echo/ada?q=hi HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+    let n2 = web::serve(app, srv, 1, 3000)
+    runner_assert_eq(r, n2, 1, "echo served")
+    let w2 = ""
+    if net::tcp_poll(c2, 3000) == true
+        w2 = net::tcp_recv(c2, 4096)
+    end
+    net::tcp_close(c2)
+    let p2 = http::http_parse_response(w2)
+    runner_assert_str_eq(r, p2.body, "echo:ada:hi", "params and query")
+
+    # 3. Throwing handlers become 500s, loop survives
+    let c3 = net::tcp_connect("127.0.0.1", 19992)
+    net::tcp_set_timeout(c3, 5000)
+    net::tcp_send(c3, "GET /boom HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+    let n3 = web::serve(app, srv, 1, 3000)
+    runner_assert_eq(r, n3, 1, "boom served without killing loop")
+    let w3 = ""
+    if net::tcp_poll(c3, 3000) == true
+        w3 = net::tcp_recv(c3, 4096)
+    end
+    net::tcp_close(c3)
+    let p3 = http::http_parse_response(w3)
+    runner_assert_eq(r, p3.status_code, 500, "boom status 500")
+
+    # 4. Loop still serves after the failure
+    let c4 = net::tcp_connect("127.0.0.1", 19992)
+    net::tcp_set_timeout(c4, 5000)
+    net::tcp_send(c4, "GET /hello HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+    let n4 = web::serve(app, srv, 1, 3000)
+    runner_assert_eq(r, n4, 1, "serves after failure")
+    net::tcp_close(c4)
+    http::server_close(srv)
+
+    let failed = runner_summary(r)
+    if failed > 0
+        exit(1)
+    end
+end
+
+main()

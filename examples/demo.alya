@@ -1,163 +1,51 @@
-## Example usage and walkthrough for web
+## Demo of the web framework package
 ## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
 
-import "../src/lib.alya" as pkg
+import "http" as http
+import "../src/lib.alya" as web
+
+function hello(ctx)
+    return web::ctx_json_map(ctx, {"message": "Hello from web"})
+end
+
+function show_user(ctx)
+    return web::ctx_text(ctx, "user:" + web::ctx_param(ctx, "id"), 200)
+end
+
+function missing(ctx)
+    return web::ctx_json_map(ctx, {"error": "try /hello"}, 404)
+end
 
 function main()
-    say "=== web Package Showcase ==="
-    say ""
+    say "=== alya-lang/web Feature Tour ==="
 
-    # ───────────────────────────────────────────────────────────
-    # 1. Basic Facade Greeting
-    # ───────────────────────────────────────────────────────────
-    say "--- 1. Facade Greeting ---"
-    let greeting_default = pkg::hello()
-    say "Default: " + greeting_default
+    # 1. App with routes, groups, and middleware
+    let app = web::app()
+    app.get("/hello", hello)
+    app.get("/users/:id", show_user)
+    let api = app.group("/api")
+    api.get("/status", hello)
+    app.use_request_id().use_logger().use_keep_alive()
+    app.not_found(missing)
+    say "Routes: " + str(len(app.router.routes))
 
-    let greeting_custom = pkg::hello("Alya Developer")
-    say "Custom:  " + greeting_custom
-    say ""
+    # 2. Pure dispatch (no sockets): match, params, invoke
+    let dctx = http::ctx_new(http::request_create("GET", "/users/7"), http::response())
+    let m = web::app_dispatch(app, "GET", "/users/7", dctx)
+    say "Dispatch found: " + str(m.found) + " Body: " + dctx.res.body
 
-    # ───────────────────────────────────────────────────────────
-    # 2. Enumeration Values
-    # ───────────────────────────────────────────────────────────
-    say "--- 2. Enumeration Values ---"
-    say "WebStatus.Pending  = " + str(pkg::WebStatus.Pending)
-    say "WebStatus.Active   = " + str(pkg::WebStatus.Active)
-    say "WebStatus.Archived = " + str(pkg::WebStatus.Archived)
-    say "WebStatus.Error    = " + str(pkg::WebStatus.Error)
+    # 3. Middleware materializes on the built server
+    let srv = web::app_build_server(app, 18080, "127.0.0.1")
+    say "Logger wired: " + str(srv.options["logger_enabled"])
+    say "Keep-alive wired: " + str(srv.options["keep_alive_enabled"])
 
-    say "WebPriority.Low      = " + str(pkg::WebPriority.Low)
-    say "WebPriority.Normal   = " + str(pkg::WebPriority.Normal)
-    say "WebPriority.High     = " + str(pkg::WebPriority.High)
-    say "WebPriority.Critical = " + str(pkg::WebPriority.Critical)
+    # 4. Bounded serve with no client terminates cleanly
+    http::server_start(srv)
+    let served = web::serve(app, srv, 1, 300)
+    say "Served (no client): " + str(served)
+    http::server_close(srv)
 
-    say "WebStyle.Standard = " + str(pkg::WebStyle.Standard)
-    say "WebStyle.Formal   = " + str(pkg::WebStyle.Formal)
-    say "WebStyle.Casual   = " + str(pkg::WebStyle.Casual)
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 3. Struct Models & Constructors
-    # ───────────────────────────────────────────────────────────
-    say "--- 3. Struct Models & Constructors ---"
-    let cfg = pkg::new_config("Community", 5, pkg::WebPriority.High, pkg::WebStyle.Formal)
-    say "Config Name:     " + cfg.name
-    say "Config Count:    " + str(cfg.count)
-    say "Config Priority: " + str(cfg.priority)
-    say "Config Style:    " + str(cfg.style)
-    say "Config Enabled:  " + str(cfg.enabled)
-
-    let stats = pkg::make_stats(100, 92, 6, 2)
-    say "Stats Total:     " + str(stats.total)
-    say "Stats Passed:    " + str(stats.passed)
-    say "Stats Failed:    " + str(stats.failed)
-    say "Stats Skipped:   " + str(stats.skipped)
-    say "Stats Checked:   " + str(stats.total_checked())
-    say "Stats Rate:      " + stats.success_rate()
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 4. Struct Methods & Immutability
-    # ───────────────────────────────────────────────────────────
-    say "--- 4. Struct Methods & Immutability ---"
-    say "Summary:         " + cfg.summary()
-    say "Description:     " + cfg.describe()
-    say "Is Valid:        " + str(cfg.is_valid())
-    say "Is Enabled:      " + str(cfg.is_enabled())
-
-    let updated_cfg = cfg.with_name("Core Contributors")
-    say "Updated Name:    " + updated_cfg.name
-    say "Original Name:   " + cfg.name
-
-    let critical_cfg = cfg.with_priority(pkg::WebPriority.Critical)
-    say "Updated Prio:    " + str(critical_cfg.priority)
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 5. Result Container Pattern
-    # ───────────────────────────────────────────────────────────
-    say "--- 5. Result Container Pattern ---"
-    let ok_res = pkg::ok_result(42, "Processed payload successfully")
-    say "Ok Result is_ok:    " + str(ok_res.is_ok())
-    say "Ok Result message:  " + ok_res.message
-    say "Ok Result unwrap:   " + ok_res.unwrap_or("fallback")
-
-    let err_res = pkg::error_result("Processing failed", ["Disk full", "Permission denied"])
-    say "Err Result is_err:  " + str(err_res.is_error())
-    say "Err Result message: " + err_res.message
-    say "Err Result unwrap:  " + err_res.unwrap_or("safe default")
-    say "Err Count:          " + str(len(err_res.errors))
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 6. Structural Duck Typing (Interfaces)
-    # ───────────────────────────────────────────────────────────
-    say "--- 6. Duck Typing (Interfaces) ---"
-    if cfg is pkg::Summarizable
-        say "Summarizable dispatch: " + pkg::format_summary(cfg)
-    end
-    if cfg is pkg::Describable
-        say "Describable dispatch:  " + pkg::format_description(cfg)
-    end
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 7. Workflow Processing & Batching
-    # ───────────────────────────────────────────────────────────
-    say "--- 7. Workflow Processing & Batching ---"
-    let single_res = pkg::process("Analytics", 3, pkg::WebPriority.High)
-    say "Single Process Result: " + pkg::format_result(single_res)
-
-    let items = ["Alpha", "Beta", "Gamma"]
-    let batch_res = pkg::process_batch(items)
-    say "Batch count: " + str(len(batch_res))
-    for b in batch_res
-        say "  - " + b
-    end
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 8. Control Flow & Pattern Matching Utilities
-    # ───────────────────────────────────────────────────────────
-    say "--- 8. Utility Functions ---"
-    say "Clamp (-5 in [0, 100]):  " + str(pkg::clamp(-5, 0, 100))
-    say "Clamp (50 in [0, 100]):  " + str(pkg::clamp(50, 0, 100))
-    say "Clamp (150 in [0, 100]): " + str(pkg::clamp(150, 0, 100))
-
-    say "Pluralize (1):           " + pkg::pluralize(1, "item", "items")
-    say "Pluralize (5):           " + pkg::pluralize(5, "item", "items")
-
-    let repeated = pkg::repeat_string("echo", 3)
-    say "Repeat string count:     " + str(len(repeated))
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 9. Destructuring: Tuples & Maps
-    # ───────────────────────────────────────────────────────────
-    say "--- 9. Destructuring ---"
-    let (label, count) = ("example", 42)
-    say "Tuple label: " + label
-    say "Tuple count: " + str(count)
-
-    let info = { "package": "web", "version": "0.1.0" }
-    let { package: pkg_name, version: pkg_ver } = info
-    say "Map package: " + pkg_name
-    say "Map version: " + pkg_ver
-    say ""
-
-    # ───────────────────────────────────────────────────────────
-    # 10. Feature-Gated API (`extras`, default-on)
-    # ───────────────────────────────────────────────────────────
-    say "--- 10. Feature-Gated Extras ---"
-    @cfg(feature = "extras")
-    say "Extras greeting: " + pkg::extra_greeting("Developer")
-    @cfg(not(feature = "extras"))
-    say "Extras greeting: (disabled — rebuild with --features extras)"
-    say ""
-
-    say ""
-    say "Done!"
+    say "All alya-lang/web features operational!"
 end
 
 main()

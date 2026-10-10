@@ -1,0 +1,62 @@
+## Test suite for web context helpers
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
+import "std/test"
+import "http" as http
+import "../src/lib.alya" as web
+
+function main()
+    test_suite("web Context Tests")
+    let r = runner_new()
+
+    let ctx = http::ctx_new(http::request_create("GET", "/u/7?q=x"))
+    web::ctx_text(ctx, "hi", 200)
+    runner_assert_str_eq(r, ctx.res.body, "hi", "ctx_text body")
+
+    web::ctx_json(ctx, "{\"a\":1}", 201)
+    runner_assert_eq(r, ctx.res.status_code, 201, "ctx_json status")
+    runner_assert_str_eq(r, http::header_get(ctx.res.headers, "Content-Type"), "application/json; charset=utf-8", "ctx_json type")
+
+    web::ctx_json_value(ctx, {"ok": "yes"})
+    runner_assert_str_eq(r, ctx.res.body, "{\"ok\": \"yes\"}", "ctx_json_value body")
+
+    web::ctx_json_map(ctx, {"k": "v"})
+    runner_assert_str_eq(r, ctx.res.body, "{\"k\": \"v\"}", "ctx_json_map body")
+
+    web::ctx_html(ctx, "<b>x</b>")
+    runner_assert_str_eq(r, http::header_get(ctx.res.headers, "Content-Type"), "text/html; charset=utf-8", "ctx_html type")
+
+    web::ctx_redirect(ctx, "/there", 302)
+    runner_assert_str_eq(r, http::header_get(ctx.res.headers, "Location"), "/there", "ctx_redirect target")
+
+    web::ctx_status(ctx, 418, "Teapot")
+    runner_assert_eq(r, ctx.res.status_code, 418, "ctx_status code")
+
+    web::ctx_set_header(ctx, "X-A", "b")
+    runner_assert_str_eq(r, web::ctx_header(ctx, "x-a"), "", "ctx_header reads request headers only")
+
+    let q = http::request_create("GET", "/s", "q=x&n=3", null, "", "", null, null, {"q": "x", "n": "3"})
+    let qctx = http::ctx_new(q)
+    runner_assert_str_eq(r, web::ctx_query(qctx, "q"), "x", "ctx_query value")
+    runner_assert_str_eq(r, web::ctx_query(qctx, "missing", "dflt"), "dflt", "ctx_query default")
+
+    let pctx = http::ctx_new(http::request_create("POST", "/echo", "", {}, "raw-body"))
+    runner_assert_str_eq(r, web::ctx_body(pctx), "raw-body", "ctx_body raw")
+    runner_assert(r, web::ctx_body_json(pctx) is null, "ctx_body_json null on plain text")
+
+    let jctx = http::ctx_new(http::request_create("POST", "/j", "", {}, "{\"a\":1}"))
+    runner_assert(r, web::ctx_body_json(jctx) is not null, "ctx_body_json parses")
+
+    web::ctx_cookie(ctx, "c", "v")
+    runner_assert_eq(r, len(ctx.res.cookies), 1, "ctx_cookie stored")
+
+    let ab = http::ctx_new(http::request_create("GET", "/"))
+    web::ctx_abort(ab)
+    runner_assert_eq(r, ab.aborted, 1, "ctx_abort flag")
+
+    let failed = runner_summary(r)
+    if failed > 0
+        exit(1)
+    end
+end
+
+main()

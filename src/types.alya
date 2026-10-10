@@ -14,6 +14,8 @@ import "pool" as pool
 ## - `router`: Active `http` route registry.
 ## - `options`: Framework setting map (middleware toggles, handlers, limits).
 ## - `buffer_pool`: Shared response-fragment buffer pool (see `pool_stats`).
+##   A struct field (not an options entry) by design: method calls on
+##   map-retrieved receivers do not emit (see alya-lang/alya#163).
 pub struct App
     router,
     options: map,

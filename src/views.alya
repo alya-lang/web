@@ -1,0 +1,90 @@
+## web Views: Mustache rendering with compiled-template caching,
+## layouts, and pooled fragment assembly.
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang).
+
+import "http" as http
+import "mustache" as mustache
+import "pool" as pool
+import "./types.alya"
+
+## Renders a Mustache template string directly as HTML.
+pub function view(ctx, template_str: string, data, status_code: int = 200)
+    return http::ctx_html(ctx, mustache::render(template_str, data), status_code)
+end
+
+## Renders through the app-level compiled-template cache.
+##
+## The first render of a template string compiles it once; later renders
+## reuse the AST. The cache holds at most `view_cache_max` entries
+## (default 64); exceeding it clears the cache. Output is identical to
+## `view`.
+pub function view_cached(app: App, ctx, template_str: string, data, status_code: int = 200)
+    let html = view_render_cached(app, template_str, data)
+    return http::ctx_html(ctx, html, status_code)
+end
+
+## Renders a body template inside a layout template.
+##
+## The body renders first (cached), then injects as raw HTML into the
+## layout scope under the `body` key — layouts place it with
+## `{{{body}}}`. Other scope keys come from `data` (null data behaves
+## as an empty scope).
+pub function view_layout(app: App, ctx, layout_str: string, body_str: string, data, status_code: int = 200)
+    let body_html = view_render_cached(app, body_str, data)
+    let scope = {}
+    if data is not null
+        for k in keys(data)
+            scope[k] = data[k]
+        end
+    end
+    scope["body"] = body_html
+    let html = view_render_cached(app, layout_str, scope)
+    return http::ctx_html(ctx, html, status_code)
+end
+
+## Renders several part templates and joins them into one HTML body.
+##
+## Fragment assembly borrows an array from the app buffer pool instead
+## of allocating per request; the buffer returns to the pool before
+## responding. When the pool is exhausted a fresh array is used, so
+## output stays correct under load.
+pub function view_fragments(app: App, ctx, parts, data, status_code: int = 200)
+    let slot = app.buffer_pool.acquire()
+    let buf = []
+    let pooled = 0
+    if slot is not null
+        buf = slot.value
+        pooled = 1
+    end
+    for part in parts
+        buf.push(view_render_cached(app, part, data))
+    end
+    let out = ""
+    for frag in buf
+        out += frag
+    end
+    if pooled == 1
+        app.buffer_pool.release(slot)
+    end
+    return http::ctx_html(ctx, out, status_code)
+end
+
+## Compiles (on first use) and renders a template through the app cache.
+pub function view_render_cached(app: App, template_str: string, data) -> string
+    let cache = app.options["view_cache"]
+    if template_str not in cache
+        if len(keys(cache)) >= app.options["view_cache_max"]
+            app.options["view_cache"] = {}
+            cache = app.options["view_cache"]
+        end
+        cache[template_str] = mustache::compile(template_str)
+    end
+    return mustache::render_template(cache[template_str], data)
+end
+
+## Reports buffer-pool utilization for the app.
+pub function pool_stats(app: App)
+    let sz = app.buffer_pool.size()
+    let idle = app.buffer_pool.idle_count()
+    return {"size": sz, "idle": idle, "active": sz - idle}
+end

@@ -15,7 +15,8 @@ High-level web framework for Alya: routing, middleware, JSON APIs, and views
 - 🛡️ **Error Boundary**: throwing handlers become 500 responses; custom `not_found` and `on_error` hooks instead of dead connections
 - 🧩 **Middleware Suite**: CORS, compression, static files, logging (+templates), Basic/Bearer/JWT auth, rate limiting, request IDs, timeouts, size limits, keep-alive, trusted proxies, TLS — all `use_*` one-liners
 - 📦 **JSON APIs**: `ctx_json`, `ctx_json_value`, `ctx_json_map`, `ctx_body_json` for request/response cycles
-- 🖥️ **Views**: Mustache rendering (`ctx_render`) for HTML responses
+- 🖥️ **Views**: Mustache rendering with a compiled-template cache (`view_cached`), layouts (`view_layout` with `{{{body}}}`), and pooled fragment assembly (`view_fragments`)
+- 🪣 **Buffer Pooling**: per-app `pool` buffer reuse for fragment assembly with `pool_stats` observability (degrades to fresh arrays under exhaustion)
 - 🔁 **Serve Loop**: one-call `listen` with keep-alive connection reuse over `alya-lang/http` (v0.4.0)
 
 ---
@@ -24,23 +25,25 @@ High-level web framework for Alya: routing, middleware, JSON APIs, and views
 
 ```
 web/
-├── alya.toml               # Package manifest (depends on alya-lang/http)
+├── alya.toml               # Package manifest (http, json, mustache, pool)
 ├── src/
 │   ├── lib.alya            # Public API facade & `app()` constructor
 │   ├── types.alya          # `App` and `WebGroup` models
 │   ├── app.alya            # Routes, groups, error hooks, serve loop
 │   ├── middleware.alya     # `use_*` settings (all chainable)
-│   └── context.alya        # `ctx_*` handler conveniences
+│   ├── context.alya        # `ctx_*` handler conveniences
+│   └── views.alya          # Mustache cache, layouts, pooled fragments
 ├── examples/
-│   └── demo.alya           # Runnable tour of routes, middleware, and serving
-├── tests/                  # 5 suites: app, context, middleware, serve, errors
+│   └── demo.alya           # Runnable tour of routes, middleware, views, serving
+├── tests/                  # 6 suites: app, context, middleware, serve, errors, views
 │   ├── test_app.alya
 │   ├── test_context.alya
 │   ├── test_middleware.alya
 │   ├── test_serve.alya
-│   └── test_errors.alya
+│   ├── test_errors.alya
+│   └── test_views.alya
 └── benches/
-    └── bench_basic.alya    # Route dispatch micro-benchmarks
+    └── bench_basic.alya    # Route dispatch + cached-render micro-benchmarks
 ```
 
 > [!NOTE]
@@ -177,6 +180,19 @@ main()
 | `ctx_cookie/get_cookie(ctx, ...)` | `ctx, ...` | Cookie read/write |
 | `ctx_client_ip/scheme(ctx)` | `ctx` | Effective client IP and scheme |
 | `ctx_abort(ctx)` | `ctx` | Aborts pipeline processing |
+
+### Views & Pool
+
+| Function | Parameters | Description |
+|---|---|---|
+| `view(ctx, template, data, status)` | `ctx, ...` | Mustache template as HTML (parse per call) |
+| `view_cached(app, ctx, template, data, status)` | `app: App, ...` | Compile-once render via the app template cache |
+| `view_layout(app, ctx, layout, body, data, status)` | `app: App, ...` | Body (cached) injected raw as `{{{body}}}` into the layout |
+| `view_fragments(app, ctx, parts, data, status)` | `app: App, ...` | Joins part renders using a pooled buffer |
+| `pool_stats(app)` | `app: App` | Buffer-pool `{size, idle, active}` map |
+
+> [!NOTE]
+> **Mustache tags in source:** build templates from `ot = "{{"` / `ct = "}}"` fragments. Literal `{{...}}` runs in plain strings are brace-collapsed by the toolchain, which corrupts tags before Mustache sees them (see `tests/test_views.alya`).
 
 ---
 

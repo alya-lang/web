@@ -37,6 +37,19 @@ function main()
     end
     bench_stop(runner, "App dispatch with handler invoke")
 
+    # 3. Cached view render throughput (compile once, render N)
+    let ot = "{{"
+    let ct = "}}"
+    let tpl = "Hello, " + ot + "name" + ct + "!"
+    bench_start(runner, 5000)
+    let v = 0
+    while v < 5000
+        let vctx = http::ctx_new(http::request_create("GET", "/page"), http::response())
+        web::view_cached(app, vctx, tpl, {"name": "Ada"})
+        v += 1
+    end
+    bench_stop(runner, "Cached view render")
+
     bench_summary(runner)
 end
 

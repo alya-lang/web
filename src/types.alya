@@ -2,6 +2,7 @@
 ## Part of the Alya Language package ecosystem (https://github.com/alya-lang).
 
 import "http" as http
+import "pool" as pool
 
 ## High-level web application: an HTTP router plus framework settings.
 ##
@@ -12,9 +13,11 @@ import "http" as http
 ## ### Fields
 ## - `router`: Active `http` route registry.
 ## - `options`: Framework setting map (middleware toggles, handlers, limits).
+## - `buffer_pool`: Shared response-fragment buffer pool (see `pool_stats`).
 pub struct App
     router,
-    options: map
+    options: map,
+    buffer_pool
 end
 
 ## Route group binding an App to a common path prefix.
@@ -31,6 +34,7 @@ end
 pub function app_new() -> App
     return App {
         router: http::router(),
+        buffer_pool: pool::new_buffer_pool(1024, 20),
         options: {
             "not_found": null,
             "on_error": null,
@@ -63,7 +67,9 @@ pub function app_new() -> App
             "forwarded_enabled": 0,
             "tls_enabled": 0,
             "tls_cert": "",
-            "tls_key": ""
+            "tls_key": "",
+            "view_cache_max": 64,
+            "view_cache": {}
         }
     }
 end

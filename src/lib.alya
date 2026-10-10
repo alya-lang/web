@@ -23,6 +23,7 @@ import "./types.alya"
 import "./app.alya"
 import "./middleware.alya"
 import "./context.alya"
+import "./views.alya"
 
 ## Creates a new App with default settings.
 ##

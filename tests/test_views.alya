@@ -1,0 +1,100 @@
+## Test suite for web views (mustache rendering, cache, layouts, pooled fragments)
+## Part of the Alya Language package ecosystem (https://github.com/alya-lang)
+import "std/test"
+import "http" as http
+import "../src/lib.alya" as web
+
+# NOTE: templates are built with ot/ct fragments, never literal `{{...}}`:
+# the toolchain collapses balanced double-brace runs in plain strings
+# (f-string-era brace escapes), which would corrupt mustache tags.
+
+function main()
+    test_suite("web Views Tests")
+    let r = runner_new()
+    let app = web::app()
+    let ot = "{{"
+    let ct = "}}"
+    let oraw = "{{{"
+    let craw = "}}}"
+
+    # 1. Direct render with escaping
+    let ctx = http::ctx_new(http::request_create("GET", "/"))
+    web::view(ctx, "Hello, " + ot + "name" + ct + "!", {"name": "Ada"})
+    runner_assert_str_eq(r, ctx.res.body, "Hello, Ada!", "view basic")
+    runner_assert_eq(r, ctx.res.status_code, 200, "view status")
+    runner_assert_str_eq(r, http::header_get(ctx.res.headers, "Content-Type"), "text/html; charset=utf-8", "view type")
+
+    let ctx2 = http::ctx_new(http::request_create("GET", "/"))
+    web::view(ctx2, "Hi " + ot + "n" + ct + " " + oraw + "n" + craw + "!", {"n": "<b>"})
+    runner_assert_str_eq(r, ctx2.res.body, "Hi &lt;b&gt; <b>!", "view escape vs raw")
+
+    # 2. Cached render matches fresh render
+    let hello_tpl = "Hello, " + ot + "name" + ct + "!"
+    let ctx3 = http::ctx_new(http::request_create("GET", "/"))
+    web::view_cached(app, ctx3, hello_tpl, {"name": "Ada"})
+    runner_assert_str_eq(r, ctx3.res.body, "Hello, Ada!", "cached body")
+    runner_assert_eq(r, len(keys(app.options["view_cache"])), 1, "one cached template")
+    let ctx4 = http::ctx_new(http::request_create("GET", "/"))
+    web::view_cached(app, ctx4, hello_tpl, {"name": "Grace"})
+    runner_assert_str_eq(r, ctx4.res.body, "Hello, Grace!", "cached reuse with new data")
+    runner_assert_eq(r, len(keys(app.options["view_cache"])), 1, "cache stays bounded")
+
+    # 3. Layout injects the body raw
+    let ctx5 = http::ctx_new(http::request_create("GET", "/"))
+    web::view_layout(app, ctx5, "<html>" + oraw + "body" + craw + "</html>", "Hi " + ot + "n" + ct, {"n": "Bob"})
+    runner_assert_str_eq(r, ctx5.res.body, "<html>Hi Bob</html>", "layout body")
+
+    let ctx6 = http::ctx_new(http::request_create("GET", "/"))
+    web::view_layout(app, ctx6, "<t>" + ot + "title" + ct + ": " + oraw + "body" + craw + "</t>", "<b>" + ot + "v" + ct + "</b>", {"title": "P", "v": "x"}, 201)
+    runner_assert_str_eq(r, ctx6.res.body, "<t>P: <b>x</b></t>", "layout scope plus status")
+    runner_assert_eq(r, ctx6.res.status_code, 201, "layout status")
+
+    # 4. Pooled fragments join correctly and recycle the buffer
+    let s0 = web::pool_stats(app)
+    runner_assert_eq(r, s0["size"], 0, "pool starts empty")
+    let ctx7 = http::ctx_new(http::request_create("GET", "/"))
+    web::view_fragments(app, ctx7, ["<h1>" + ot + "t" + ct + "</h1>", "<p>" + ot + "b" + ct + "</p>"], {"t": "Head", "b": "Tail"})
+    runner_assert_str_eq(r, ctx7.res.body, "<h1>Head</h1><p>Tail</p>", "fragments joined")
+    let s1 = web::pool_stats(app)
+    runner_assert_eq(r, s1["size"], 1, "one buffer created")
+    runner_assert_eq(r, s1["idle"], 1, "buffer released")
+    runner_assert_eq(r, s1["active"], 0, "nothing active")
+    let ctx8 = http::ctx_new(http::request_create("GET", "/"))
+    web::view_fragments(app, ctx8, ["<i>" + ot + "t" + ct + "</i>"], {"t": "Again"})
+    runner_assert_str_eq(r, ctx8.res.body, "<i>Again</i>", "fragments reuse")
+    runner_assert_eq(r, web::pool_stats(app)["size"], 1, "buffer reused, none created")
+
+    # 5. Exhausted pool still renders via a fresh array
+    let held = []
+    let k = 0
+    while k < 20
+        held.push(app.buffer_pool.acquire())
+        k += 1
+    end
+    let ctx9 = http::ctx_new(http::request_create("GET", "/"))
+    web::view_fragments(app, ctx9, ["<u>" + ot + "t" + ct + "</u>"], {"t": "Slow"})
+    runner_assert_str_eq(r, ctx9.res.body, "<u>Slow</u>", "fragments under exhaustion")
+    let j = 0
+    while j < len(held)
+        app.buffer_pool.release(held[j])
+        j += 1
+    end
+    runner_assert_eq(r, web::pool_stats(app)["active"], 0, "all released")
+
+    # 6. Cache cap keeps correctness
+    app.options["view_cache_max"] = 1
+    let ctxa = http::ctx_new(http::request_create("GET", "/"))
+    web::view_cached(app, ctxa, "A" + ot + "x" + ct, {"x": "1"})
+    let ctxb = http::ctx_new(http::request_create("GET", "/"))
+    web::view_cached(app, ctxb, "B" + ot + "x" + ct, {"x": "2"})
+    runner_assert_str_eq(r, ctxa.res.body, "A1", "capped first")
+    runner_assert_str_eq(r, ctxb.res.body, "B2", "capped second")
+    runner_assert(r, len(keys(app.options["view_cache"])) <= 1, "cap respected")
+
+    let failed = runner_summary(r)
+    if failed > 0
+        exit(1)
+    end
+end
+
+main()

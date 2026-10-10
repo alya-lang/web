@@ -45,6 +45,25 @@ function main()
     say "Served (no client): " + str(served)
     http::server_close(srv)
 
+    # 5. Views: cached render, layout, and pooled fragments
+    # (templates use ot/ct fragments: literal `{{...}}` in plain strings
+    # is brace-collapsed by the toolchain, so mustache tags are assembled)
+    let ot = "{{"
+    let ct = "}}"
+    let oraw = "{{{"
+    let craw = "}}}"
+    let vctx = http::ctx_new(http::request_create("GET", "/page"), http::response())
+    web::view_cached(app, vctx, "Hello, " + ot + "name" + ct + "!", {"name": "Ada"})
+    say "View: " + vctx.res.body
+    let lctx = http::ctx_new(http::request_create("GET", "/page"), http::response())
+    web::view_layout(app, lctx, "<html>" + oraw + "body" + craw + "</html>", "Hi " + ot + "n" + ct, {"n": "Bob"})
+    say "Layout: " + lctx.res.body
+    let fctx = http::ctx_new(http::request_create("GET", "/page"), http::response())
+    web::view_fragments(app, fctx, ["<h1>" + ot + "t" + ct + "</h1>", "<p>" + ot + "b" + ct + "</p>"], {"t": "H", "b": "T"})
+    say "Fragments: " + fctx.res.body
+    let stats = web::pool_stats(app)
+    say "Pool size: " + str(stats["size"]) + " idle: " + str(stats["idle"])
+
     say "All alya-lang/web features operational!"
 end
 

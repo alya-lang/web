@@ -37,7 +37,16 @@ function main()
     end
     bench_stop(runner, "App dispatch with handler invoke")
 
-    # 3. Cached view render throughput (compile once, render N)
+    bench_stop(runner, "App dispatch with handler invoke")
+
+    bench_views(runner)
+
+    bench_summary(runner)
+end
+
+@cfg(feature = "views")
+function bench_views(runner)
+    let app = web::app()
     let ot = "{{"
     let ct = "}}"
     let tpl = "Hello, " + ot + "name" + ct + "!"
@@ -49,8 +58,12 @@ function main()
         v += 1
     end
     bench_stop(runner, "Cached view render")
-
-    bench_summary(runner)
 end
+
+@cfg(not(feature = "views"))
+# alya-lint: disable unused-param
+function bench_views(runner)
+end
+# alya-lint: enable unused-param
 
 main()

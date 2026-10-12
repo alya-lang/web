@@ -8,6 +8,8 @@ import "pool" as pool
 import "./types.alya"
 
 ## Renders a Mustache template string directly as HTML.
+##
+## Requires the `views` feature (default-on).
 pub function view(ctx, template_str: string, data, status_code: int = 200)
     return http::ctx_html(ctx, mustache::render(template_str, data), status_code)
 end
@@ -18,6 +20,8 @@ end
 ## reuse the AST. The cache holds at most `view_cache_max` entries
 ## (default 64); exceeding it clears the cache. Output is identical to
 ## `view`.
+##
+## Requires the `views` feature (default-on).
 pub function view_cached(app: App, ctx, template_str: string, data, status_code: int = 200)
     let html = view_render_cached(app, template_str, data)
     return http::ctx_html(ctx, html, status_code)
@@ -29,6 +33,8 @@ end
 ## layout scope under the `body` key — layouts place it with
 ## `{{{body}}}`. Other scope keys come from `data` (null data behaves
 ## as an empty scope).
+##
+## Requires the `views` feature (default-on).
 pub function view_layout(app: App, ctx, layout_str: string, body_str: string, data, status_code: int = 200)
     let body_html = view_render_cached(app, body_str, data)
     let scope = {}
@@ -48,6 +54,8 @@ end
 ## of allocating per request; the buffer returns to the pool before
 ## responding. When the pool is exhausted a fresh array is used, so
 ## output stays correct under load.
+##
+## Requires the `views` feature (default-on).
 pub function view_fragments(app: App, ctx, parts, data, status_code: int = 200)
     let slot = app.buffer_pool.acquire()
     let buf = []
@@ -70,6 +78,8 @@ pub function view_fragments(app: App, ctx, parts, data, status_code: int = 200)
 end
 
 ## Compiles (on first use) and renders a template through the app cache.
+##
+## Requires the `views` feature (default-on).
 pub function view_render_cached(app: App, template_str: string, data) -> string
     let cache = app.options["view_cache"]
     if template_str not in cache
@@ -83,6 +93,8 @@ pub function view_render_cached(app: App, template_str: string, data) -> string
 end
 
 ## Reports buffer-pool utilization for the app.
+##
+## Requires the `views` feature (default-on).
 pub function pool_stats(app: App)
     let sz = app.buffer_pool.size()
     let idle = app.buffer_pool.idle_count()

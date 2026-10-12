@@ -69,11 +69,20 @@ alya install
 
 ### Package Features
 
-This package ships a single, dependency-light build with no optional features.
+| Feature | Default | Description |
+|:---|:---:|:---|
+| `views` | ✅ | Mustache views with template cache, layouts and pooled fragments (`view`, `view_cached`, `view_layout`, `view_fragments`); enables the `mustache` dependency. |
+
+Core routing, middleware, context and app assembly always work. The App buffer `pool` stays mandatory (fragment assembly shares it).
 
 ```bash
+# Full build (default)
 alya install
 alya test
+
+# Slim build (no views; mustache stays uninstalled)
+alya install --no-default-features
+alya test --no-default-features
 ```
 
 ---

@@ -8,6 +8,7 @@ import "../src/lib.alya" as web
 # the toolchain collapses balanced double-brace runs in plain strings
 # (f-string-era brace escapes), which would corrupt mustache tags.
 
+@cfg(feature = "views")
 function main()
     test_suite("web Views Tests")
     let r = runner_new()
@@ -91,6 +92,18 @@ function main()
     runner_assert_str_eq(r, ctxb.res.body, "B2", "capped second")
     runner_assert(r, len(keys(app.options["view_cache"])) <= 1, "cap respected")
 
+    let failed = runner_summary(r)
+    if failed > 0
+        exit(1)
+    end
+end
+
+# Needs the feature: register an empty suite so the file still
+# compiles and passes in slim views.
+@cfg(not(feature = "views"))
+function main()
+    test_suite("web Views Tests (skipped without views feature)")
+    let r = runner_new()
     let failed = runner_summary(r)
     if failed > 0
         exit(1)

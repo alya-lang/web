@@ -23,6 +23,9 @@ import "./types.alya"
 import "./app.alya"
 import "./middleware.alya"
 import "./context.alya"
+# Views render through mustache (`views` feature, default-on); the App
+# buffer pool behind fragment assembly stays mandatory.
+@cfg(feature = "views")
 import "./views.alya"
 
 ## Creates a new App with default settings.
